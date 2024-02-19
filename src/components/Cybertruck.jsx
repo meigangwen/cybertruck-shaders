@@ -6,37 +6,88 @@ import { useGLTF, shaderMaterial } from "@react-three/drei";
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-import { extend } from '@react-three/fiber'
+import { extend, useFrame } from '@react-three/fiber';
 
-const TestShaderMaterial = shaderMaterial(
-  {  },
-  // vertex shader
-  /*glsl*/`
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  // fragment shader
-  /*glsl*/`
-    uniform float time;
-    uniform vec3 color;
-    varying vec2 vUv;
-    void main() {
-      float strength = vUv.y;
-      gl_FragColor.rgba = vec4(vec3(strength), 1.0);
-    }
-  `
+import stripesVertex from "../shaders/stripes.vertex.glsl";
+import stripesFragment from "../shaders/stripes.fragment.glsl";
+import disksFragment from "../shaders/disks.fragment.glsl";
+import disksVertex from "../shaders/disks.vertex.glsl";
+import {useControls} from "leva";
+
+const StripesShaderMaterial = shaderMaterial(
+  { 
+    uAlpha: 0.5,
+    uMultiplier: 42,
+    uColorA: new THREE.Color(0x000000),
+    uColorB: new THREE.Color(0x000000),
+    uTime: 0,
+  },
+  stripesVertex,
+  stripesFragment
 )
 
+const DisksShaderMaterial = shaderMaterial(
+  {
+    uAlpha: 0.5,
+    uMultiplier: 42,
+    uColorA: new THREE.Color(0x000000),
+    uColorB: new THREE.Color(0x000000),
+    uTime: 0,
+  },
+  disksVertex,
+  disksFragment
+);
+
 // declaratively
-extend({ TestShaderMaterial })
+extend({ StripesShaderMaterial });
+extend({ DisksShaderMaterial });
 
 export function Cybertruck(props) {
   const { nodes, materials } = useGLTF("./models/cybertruck.gltf");
 
+  const { shader } = useControls({
+    shader: {
+      options: ["none", "disks", "stripes"],
+    },
+  });
+
+  const disksControls = useControls("disks", {
+    alpha: {
+      min: 0,
+      max: 1,
+      value: 0.5,
+    },
+    multiplier: {
+      min: 1,
+      max: 142,
+      value: 12,
+    },
+    colorA: "#FF0000",
+    colorB: "#0000FF",
+  });
+
+  const stripesControls = useControls("stripes", {
+    alpha: {
+      min: 0,
+      max: 1,
+      value: 0.5,
+    },
+    multiplier: {
+      min: 1,
+      max: 142,
+      value: 42,
+    },
+    colorA: "#FF0000",
+    colorB: "#FFFF00",
+  });
+
   const ref = useRef();
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.uTime = state.clock.elapsedTime;
+    }
+  });
 
   useEffect(() => {
     materials.lights.toneMapped = false;
@@ -73,9 +124,30 @@ export function Cybertruck(props) {
         castShadow
       />
       {/* BODY MESH -> SHADER */}
-      <mesh geometry={nodes.interior001_6.geometry}>
-        <testShaderMaterial />
-      </mesh>
+      {shader === "disks" && (
+        <mesh geometry={nodes.interior001_6.geometry}>
+          <disksShaderMaterial
+            ref={ref}
+            transparent
+            uAlpha={disksControls.alpha}
+            uMultiplier={disksControls.multiplier}
+            uColorA={disksControls.colorA}
+            uColorB={disksControls.colorB}
+          />
+        </mesh>
+      )}
+      {shader === "stripes" && (
+        <mesh geometry={nodes.interior001_6.geometry}>
+          <stripesShaderMaterial
+            ref={ref}
+            transparent
+            uAlpha={stripesControls.alpha}
+            uMultiplier={stripesControls.multiplier}
+            uColorA={stripesControls.colorA}
+            uColorB={stripesControls.colorB}
+          />
+        </mesh>
+      )}
 
       <mesh geometry={nodes.steer.geometry} material={materials.gray} />
       <mesh
